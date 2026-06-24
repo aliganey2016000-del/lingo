@@ -1151,56 +1151,84 @@ function CourseBuilderModal({ onClose, onSaved, authorId, editCourseId }: {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-white shadow-sm flex-shrink-0">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center">
-              <BookMarked size={14} className="text-white" />
-            </div>
-            <span className="font-bold text-slate-800 text-sm">{isEdit ? 'Edit Course' : 'Course Builder'}</span>
-          </div>
-          {/* Step indicators */}
-          <div className="hidden sm:flex items-center gap-1">
-            {stepLabels.map((s, idx) => (
-              <div key={s.num} className="flex items-center gap-1">
-                {idx > 0 && <div className="w-8 h-px bg-slate-200" />}
-                <button
-                  onClick={() => setStep(s.num)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                    step === s.num
-                      ? 'bg-rose-600 text-white shadow'
-                      : step > s.num
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'text-slate-400 hover:text-slate-600'
-                  }`}
-                >
-                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black ${
-                    step === s.num ? 'bg-white/20 text-white' : step > s.num ? 'bg-emerald-200 text-emerald-700' : 'bg-slate-200 text-slate-500'
-                  }`}>{s.num}</span>
-                  {s.label}
-                </button>
+      <div className="border-b border-slate-200 bg-white shadow-sm flex-shrink-0">
+        {/* Row 1: brand + actions */}
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3">
+          <div className="flex items-center gap-2 sm:gap-6 min-w-0">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center">
+                <BookMarked size={14} className="text-white" />
               </div>
-            ))}
+              <span className="font-bold text-slate-800 text-sm">{isEdit ? 'Edit Course' : 'Course Builder'}</span>
+            </div>
+            {/* Step indicators — desktop only (shown in row 2 on mobile) */}
+            <div className="hidden sm:flex items-center gap-1">
+              {stepLabels.map((s, idx) => (
+                <div key={s.num} className="flex items-center gap-1">
+                  {idx > 0 && <div className="w-8 h-px bg-slate-200" />}
+                  <button
+                    onClick={() => setStep(s.num)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                      step === s.num
+                        ? 'bg-rose-600 text-white shadow'
+                        : step > s.num
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black ${
+                      step === s.num ? 'bg-white/20 text-white' : step > s.num ? 'bg-emerald-200 text-emerald-700' : 'bg-slate-200 text-slate-500'
+                    }`}>{s.num}</span>
+                    {s.label}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            {/* Save as Draft — icon-only on mobile, full label on desktop */}
+            <button
+              onClick={() => handleSave(false)}
+              disabled={saving || publishing || !form.title.trim()}
+              title="Save as Draft"
+              className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl hover:bg-slate-50 disabled:opacity-40 transition-colors"
+            >
+              <Save size={13} />
+              <span className="hidden sm:inline">{saving ? 'Saving…' : 'Save as Draft'}</span>
+            </button>
+            <button
+              onClick={() => handleSave(true)}
+              disabled={saving || publishing || !form.title.trim()}
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl disabled:opacity-40 transition-colors shadow"
+            >
+              {publishing ? 'Publishing…' : 'Publish'}
+            </button>
+            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+              <X size={18} className="text-slate-500" />
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleSave(false)}
-            disabled={saving || publishing || !form.title.trim()}
-            className="hidden sm:flex items-center gap-1.5 px-4 py-2 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl hover:bg-slate-50 disabled:opacity-40 transition-colors"
-          >
-            <Save size={13} /> {saving ? 'Saving…' : 'Save as Draft'}
-          </button>
-          <button
-            onClick={() => handleSave(true)}
-            disabled={saving || publishing || !form.title.trim()}
-            className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl disabled:opacity-40 transition-colors shadow"
-          >
-            {publishing ? 'Publishing…' : 'Publish'}
-          </button>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-xl transition-colors ml-1">
-            <X size={18} className="text-slate-500" />
-          </button>
+
+        {/* Row 2: step tabs — mobile only */}
+        <div className="flex sm:hidden border-t border-slate-100">
+          {stepLabels.map((s) => (
+            <button
+              key={s.num}
+              onClick={() => setStep(s.num)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-all border-b-2 ${
+                step === s.num
+                  ? 'border-rose-600 text-rose-600 bg-rose-50/40'
+                  : step > s.num
+                    ? 'border-emerald-400 text-emerald-600 bg-emerald-50/30'
+                    : 'border-transparent text-slate-400'
+              }`}
+            >
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0 ${
+                step === s.num ? 'bg-rose-600 text-white' : step > s.num ? 'bg-emerald-400 text-white' : 'bg-slate-200 text-slate-500'
+              }`}>{s.num}</span>
+              {s.label}
+            </button>
+          ))}
         </div>
       </div>
 
