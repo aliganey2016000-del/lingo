@@ -891,6 +891,8 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
   const [topics, setTopics] = useState<CurriculumTopic[]>([]);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [lessonContentEdit, setLessonContentEdit] = useState<{ topicTempId: string; item: TopicItem } | null>(null);
 
   const slugify = (t: string) =>
@@ -938,77 +940,104 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
     ));
 
   const handleSave = async (publish: boolean) => {
-    if (!form.title.trim()) return;
+    if (!form.title.trim()) {
+      setSaveError('Please enter a course title before saving.');
+      setStep(1);
+      return;
+    }
+    setSaveError(null);
+    setSaveSuccess(false);
     publish ? setPublishing(true) : setSaving(true);
 
-    const slug = slugify(form.title) + '-' + Date.now();
-    const { data: courseData, error } = await supabase
-      .from('courses')
-      .insert({
-        title: form.title.trim(),
-        slug,
-        description: form.description,
-        thumbnail_url: form.thumbnail_url || null,
-        intro_video_url: form.intro_video_url || null,
-        pricing_model: form.pricing_model,
-        visibility: form.visibility,
-        difficulty_level: form.difficulty_level,
-        is_public: form.is_public,
-        is_published: publish,
-        what_will_learn: form.what_will_learn,
-        target_audience: form.target_audience,
-        duration_hours: form.duration_hours,
-        duration_minutes: form.duration_minutes_extra,
-        materials_included: form.materials_included,
-        requirements: form.requirements,
-        tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-        author_id: authorId,
-      })
-      .select()
-      .single();
-
-    if (error || !courseData) { setSaving(false); setPublishing(false); return; }
-
-    const savedTopics = topics.filter(t => t.title.trim());
-    for (let i = 0; i < savedTopics.length; i++) {
-      const tp = savedTopics[i];
-      const { data: topicData } = await supabase
-        .from('course_topics')
-        .insert({ course_id: courseData.id, title: tp.title.trim(), summary: tp.summary, sort_order: i })
+    try {
+      const slug = slugify(form.title) + '-' + Date.now();
+      const { data: courseData, error: courseError } = await supabase
+        .from('courses')
+        .insert({
+          title: form.title.trim(),
+          slug,
+          description: form.description,
+          thumbnail_url: form.thumbnail_url || null,
+          intro_video_url: form.intro_video_url || null,
+          pricing_model: form.pricing_model,
+          visibility: form.visibility,
+          difficulty_level: form.difficulty_level,
+          is_public: form.is_public,
+          is_published: publish,
+          status: publish ? 'published' : 'draft',
+          what_will_learn: form.what_will_learn,
+          target_audience: form.target_audience,
+          duration_hours: form.duration_hours,
+          duration_minutes: form.duration_minutes_extra,
+          materials: form.materials_included,
+          materials_included: form.materials_included,
+          requirements: form.requirements,
+          tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+          author_id: authorId,
+        })
         .select()
         .single();
-      if (topicData) {
-        const validItems = tp.items.filter(it => it.title.trim());
-        for (let j = 0; j < validItems.length; j++) {
-          const it = validItems[j];
-          await supabase
-            .from('course_topic_items')
-            .insert({
-              topic_id: topicData.id, type: it.type, title: it.title.trim(), sort_order: j,
-              content: it.content, featured_image_url: it.featured_image_url,
-              video_url: it.video_url, video_hours: it.video_hours,
-              video_minutes: it.video_minutes, video_seconds: it.video_seconds,
-              attachments: it.attachments.map(a => a.url),
-            });
+
+      if (courseError || !courseData) {
+        setSaveError(courseError?.message ?? 'Failed to save course. Please try again.');
+        setSaving(false);
+        setPublishing(false);
+        return;
+      }
+
+      const savedTopics = topics.filter(t => t.title.trim());
+      for (let i = 0; i < savedTopics.length; i++) {
+        const tp = savedTopics[i];
+        const { data: topicData, error: topicError } = await supabase
+          .from('course_topics')
+          .insert({ course_id: courseData.id, title: tp.title.trim(), summary: tp.summary, sort_order: i })
+          .select()
+          .single();
+        if (topicError) {
+          console.error('Topic insert error:', topicError);
+          continue;
+        }
+        if (topicData) {
+          const validItems = tp.items.filter(it => it.title.trim());
+          for (let j = 0; j < validItems.length; j++) {
+            const it = validItems[j];
+            const { error: itemError } = await supabase
+              .from('course_topic_items')
+              .insert({
+                topic_id: topicData.id, type: it.type, title: it.title.trim(), sort_order: j,
+                content: it.content, featured_image_url: it.featured_image_url,
+                video_url: it.video_url, video_hours: it.video_hours,
+                video_minutes: it.video_minutes, video_seconds: it.video_seconds,
+                attachments: it.attachments.map(a => a.url),
+              });
+            if (itemError) console.error('Item insert error:', itemError);
+          }
         }
       }
-    }
 
-    onSaved({
-      id: courseData.id,
-      title: courseData.title,
-      description: courseData.description ?? '',
-      thumbnail_url: courseData.thumbnail_url,
-      pricing_model: courseData.pricing_model,
-      visibility: courseData.visibility,
-      difficulty_level: courseData.difficulty_level,
-      is_published: courseData.is_published,
-      created_at: courseData.created_at,
-      topic_count: savedTopics.length,
-    });
-    setSaving(false);
-    setPublishing(false);
-    onClose();
+      onSaved({
+        id: courseData.id,
+        title: courseData.title,
+        description: courseData.description ?? '',
+        thumbnail_url: courseData.thumbnail_url,
+        pricing_model: courseData.pricing_model,
+        visibility: courseData.visibility,
+        difficulty_level: courseData.difficulty_level,
+        is_published: courseData.is_published ?? publish,
+        created_at: courseData.created_at,
+        topic_count: savedTopics.length,
+      });
+
+      setSaveSuccess(true);
+      setSaving(false);
+      setPublishing(false);
+      setTimeout(onClose, 600);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'An unexpected error occurred.';
+      setSaveError(msg);
+      setSaving(false);
+      setPublishing(false);
+    }
   };
 
   const stepLabels: { num: CourseBuilderStep; label: string }[] = [
@@ -1072,6 +1101,23 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
           </button>
         </div>
       </div>
+
+      {/* Error / Success banner */}
+      {saveError && (
+        <div className="flex items-center gap-3 px-6 py-2.5 bg-red-50 border-b border-red-200 flex-shrink-0">
+          <AlertTriangle size={15} className="text-red-500 flex-shrink-0" />
+          <p className="flex-1 text-sm text-red-700 font-medium">{saveError}</p>
+          <button onClick={() => setSaveError(null)} className="p-1 hover:bg-red-100 rounded transition-colors">
+            <X size={14} className="text-red-400" />
+          </button>
+        </div>
+      )}
+      {saveSuccess && (
+        <div className="flex items-center gap-3 px-6 py-2.5 bg-emerald-50 border-b border-emerald-200 flex-shrink-0">
+          <CheckCircle size={15} className="text-emerald-500 flex-shrink-0" />
+          <p className="flex-1 text-sm text-emerald-700 font-medium">Course saved successfully!</p>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto bg-slate-50">
