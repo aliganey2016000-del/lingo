@@ -6,7 +6,8 @@ import {
   MoreVertical, Clock, FileText, AlertTriangle, X, Save,
   Crown, GraduationCap as StudentIcon,
   RefreshCw, Edit3, Plus, GripVertical, ChevronLeft,
-  Upload, Globe, Lock, BookMarked,
+  Upload, Globe, Lock, BookMarked, Video, Paperclip, Image,
+  Bold, Italic, Underline, List, AlignLeft, AlignCenter, AlignRight, Link,
 } from 'lucide-react';
 import SidebarLayout, { NavItem } from '../components/SidebarLayout';
 import { useAuth } from '../lib/AuthContext';
@@ -80,6 +81,12 @@ interface TopicItem {
   type: 'lesson' | 'quiz' | 'assignment';
   title: string;
   editing: boolean;
+  content: string;
+  featured_image_url: string;
+  video_url: string;
+  video_hours: number;
+  video_minutes: number;
+  video_seconds: number;
 }
 
 interface CurriculumTopic {
@@ -378,6 +385,212 @@ function CourseCard({ course, onEdit, onDelete, onTogglePublish }: {
   );
 }
 
+// ── Lesson Content Modal ─────────────────────────────────────────────────────
+function LessonContentModal({ item, topicTitle, onSave, onClose }: {
+  item: TopicItem;
+  topicTitle: string;
+  onSave: (patch: Partial<TopicItem>) => void;
+  onClose: () => void;
+}) {
+  const [form, setForm] = useState({
+    title: item.title,
+    content: item.content,
+    featured_image_url: item.featured_image_url,
+    video_url: item.video_url,
+    video_hours: item.video_hours,
+    video_minutes: item.video_minutes,
+    video_seconds: item.video_seconds,
+  });
+  const hasChanges =
+    form.title !== item.title ||
+    form.content !== item.content ||
+    form.featured_image_url !== item.featured_image_url ||
+    form.video_url !== item.video_url ||
+    form.video_hours !== item.video_hours ||
+    form.video_minutes !== item.video_minutes ||
+    form.video_seconds !== item.video_seconds;
+
+  const handleSave = () => {
+    onSave({ ...form, editing: false });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col bg-white animate-fadeIn">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-white shadow-sm flex-shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          {hasChanges && (
+            <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1 rounded-lg text-xs font-semibold flex-shrink-0">
+              <AlertTriangle size={12} /> Unsaved Changes
+            </div>
+          )}
+          <span className="text-sm text-slate-400 truncate">Topic: <span className="font-semibold text-slate-700">{topicTitle}</span></span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+          <button
+            onClick={handleSave}
+            disabled={!form.title.trim()}
+            className="flex items-center gap-1.5 px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors shadow"
+          >
+            <Save size={14} /> Save
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto bg-slate-50">
+        <div className="max-w-6xl mx-auto p-6 flex flex-col lg:flex-row gap-6">
+          {/* Left — main content */}
+          <div className="flex-1 space-y-5">
+            {/* Name */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Name</label>
+              <input
+                autoFocus
+                value={form.title}
+                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                placeholder="Enter lesson title…"
+                className="w-full text-base font-semibold text-slate-900 bg-transparent border-b border-slate-200 pb-2 focus:outline-none focus:border-rose-400 transition"
+              />
+            </div>
+
+            {/* Content editor */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Content</label>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-rose-600 font-semibold bg-rose-50 border border-rose-100 px-2 py-0.5 rounded">Visual</span>
+                  <span className="text-xs text-slate-400 font-medium px-2 py-0.5 rounded cursor-pointer hover:bg-slate-100">Code</span>
+                </div>
+              </div>
+              {/* Toolbar */}
+              <div className="flex items-center flex-wrap gap-0.5 px-3 py-2 border-b border-slate-100 bg-slate-50">
+                {[
+                  { icon: Bold,        title: 'Bold' },
+                  { icon: Italic,      title: 'Italic' },
+                  { icon: Underline,   title: 'Underline' },
+                  { icon: List,        title: 'List' },
+                  { icon: AlignLeft,   title: 'Align Left' },
+                  { icon: AlignCenter, title: 'Align Center' },
+                  { icon: AlignRight,  title: 'Align Right' },
+                  { icon: Link,        title: 'Link' },
+                ].map(btn => (
+                  <button
+                    key={btn.title}
+                    title={btn.title}
+                    type="button"
+                    className="p-1.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                  >
+                    <btn.icon size={14} />
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={form.content}
+                onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+                placeholder="Write the lesson content here…"
+                rows={12}
+                className="w-full px-5 py-4 text-sm text-slate-700 bg-white focus:outline-none resize-none placeholder-slate-300"
+              />
+            </div>
+          </div>
+
+          {/* Right sidebar */}
+          <div className="w-full lg:w-72 space-y-4 flex-shrink-0">
+            {/* Featured Image */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Featured Image</label>
+              {form.featured_image_url ? (
+                <div className="relative group mb-2">
+                  <img src={form.featured_image_url} alt="preview" className="w-full h-36 object-cover rounded-xl" />
+                  <button
+                    onClick={() => setForm(f => ({ ...f, featured_image_url: '' }))}
+                    className="absolute top-2 right-2 p-1 bg-black/50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X size={12} className="text-white" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-full h-36 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300 mb-3">
+                  <Image size={24} />
+                  <span className="text-xs mt-1">No image</span>
+                </div>
+              )}
+              <input
+                value={form.featured_image_url}
+                onChange={e => setForm(f => ({ ...f, featured_image_url: e.target.value }))}
+                placeholder="Paste image URL…"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-rose-400 transition"
+              />
+              <p className="text-xs text-slate-400 mt-1">JPEG, PNG, GIF, and WebP formats</p>
+            </div>
+
+            {/* Video */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Video</label>
+              <div className="w-full h-28 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300 mb-3">
+                <Video size={22} />
+                <span className="text-xs mt-1">No video</span>
+              </div>
+              <input
+                value={form.video_url}
+                onChange={e => setForm(f => ({ ...f, video_url: e.target.value }))}
+                placeholder="Add from URL…"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-rose-400 transition"
+              />
+              <p className="text-xs text-slate-400 mt-1">MP4, and WebM formats</p>
+            </div>
+
+            {/* Video Playback Time */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Video Playback Time</label>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 flex-1">
+                  <input
+                    type="number" min={0} value={form.video_hours}
+                    onChange={e => setForm(f => ({ ...f, video_hours: Math.max(0, +e.target.value) }))}
+                    className="w-full px-2 py-2 rounded-lg border border-slate-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-rose-400 transition"
+                  />
+                  <span className="text-xs text-slate-500 flex-shrink-0">hour</span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-1">
+                  <input
+                    type="number" min={0} max={59} value={form.video_minutes}
+                    onChange={e => setForm(f => ({ ...f, video_minutes: Math.max(0, Math.min(59, +e.target.value)) }))}
+                    className="w-full px-2 py-2 rounded-lg border border-slate-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-rose-400 transition"
+                  />
+                  <span className="text-xs text-slate-500 flex-shrink-0">min</span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-1">
+                  <input
+                    type="number" min={0} max={59} value={form.video_seconds}
+                    onChange={e => setForm(f => ({ ...f, video_seconds: Math.max(0, Math.min(59, +e.target.value)) }))}
+                    className="w-full px-2 py-2 rounded-lg border border-slate-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-rose-400 transition"
+                  />
+                  <span className="text-xs text-slate-500 flex-shrink-0">sec</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Exercise Files */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Exercise Files</label>
+              <button
+                type="button"
+                className="w-full flex items-center justify-center gap-2 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+              >
+                <Paperclip size={14} /> Upload Attachment
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Course Builder Modal (multi-stage) ───────────────────────────────────────
 const defaultCourseForm: CourseFormData = {
   title: '',
@@ -408,6 +621,7 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
   const [topics, setTopics] = useState<CurriculumTopic[]>([]);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [lessonContentEdit, setLessonContentEdit] = useState<{ topicTempId: string; item: TopicItem } | null>(null);
 
   const slugify = (t: string) =>
     t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -430,7 +644,11 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
     setTopics(prev => prev.filter(t => t.tempId !== tempId));
 
   const addItem = (topicTempId: string, type: 'lesson' | 'quiz' | 'assignment') => {
-    const item: TopicItem = { tempId: crypto.randomUUID(), type, title: '', editing: true };
+    const item: TopicItem = {
+      tempId: crypto.randomUUID(), type, title: '', editing: true,
+      content: '', featured_image_url: '', video_url: '',
+      video_hours: 0, video_minutes: 0, video_seconds: 0,
+    };
     setTopics(prev => prev.map(t =>
       t.tempId === topicTempId ? { ...t, items: [...t.items, item] } : t
     ));
@@ -491,9 +709,15 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
       if (topicData) {
         const validItems = tp.items.filter(it => it.title.trim());
         for (let j = 0; j < validItems.length; j++) {
+          const it = validItems[j];
           await supabase
             .from('course_topic_items')
-            .insert({ topic_id: topicData.id, type: validItems[j].type, title: validItems[j].title.trim(), sort_order: j });
+            .insert({
+              topic_id: topicData.id, type: it.type, title: it.title.trim(), sort_order: j,
+              content: it.content, featured_image_url: it.featured_image_url,
+              video_url: it.video_url, video_hours: it.video_hours,
+              video_minutes: it.video_minutes, video_seconds: it.video_seconds,
+            });
         }
       }
     }
@@ -848,9 +1072,17 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
                                     item.type === 'quiz'   ? 'bg-amber-100 text-amber-600' :
                                                              'bg-green-100 text-green-600'
                                   }`}>{item.type}</span>
-                                  <span className="flex-1 text-sm text-slate-700">{item.title}</span>
-                                  <button onClick={() => updateItem(topic.tempId, item.tempId, { editing: true })}
-                                    className="p-1 hover:bg-slate-100 rounded-lg"><Edit3 size={12} className="text-slate-400" /></button>
+                                  <span
+                                    className={`flex-1 text-sm text-slate-700 truncate ${item.type === 'lesson' ? 'cursor-pointer hover:text-rose-600' : ''}`}
+                                    onClick={() => item.type === 'lesson' && setLessonContentEdit({ topicTempId: topic.tempId, item })}
+                                  >{item.title}</span>
+                                  <button
+                                    onClick={() => item.type === 'lesson'
+                                      ? setLessonContentEdit({ topicTempId: topic.tempId, item })
+                                      : updateItem(topic.tempId, item.tempId, { editing: true })
+                                    }
+                                    className="p-1 hover:bg-slate-100 rounded-lg"
+                                  ><Edit3 size={12} className="text-slate-400" /></button>
                                   <button onClick={() => removeItem(topic.tempId, item.tempId)}
                                     className="p-1 hover:bg-red-50 rounded-lg"><X size={12} className="text-red-400" /></button>
                                 </>
@@ -977,6 +1209,16 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
           </button>
         )}
       </div>
+
+      {/* Lesson Content Modal */}
+      {lessonContentEdit && (
+        <LessonContentModal
+          item={lessonContentEdit.item}
+          topicTitle={topics.find(t => t.tempId === lessonContentEdit.topicTempId)?.title ?? ''}
+          onSave={patch => updateItem(lessonContentEdit.topicTempId, lessonContentEdit.item.tempId, patch)}
+          onClose={() => setLessonContentEdit(null)}
+        />
+      )}
     </div>
   );
 }
