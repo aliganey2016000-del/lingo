@@ -8,6 +8,7 @@ import {
   RefreshCw, Edit3, Plus, GripVertical, ChevronLeft,
   Upload, Globe, Lock, BookMarked, Video, Paperclip, Image,
   Bold, Italic, Underline, List, AlignLeft, AlignCenter, AlignRight, Link,
+  ListOrdered, Quote, Link2Off, Minus, Code, Table2, ChevronDown, Sparkles,
 } from 'lucide-react';
 import SidebarLayout, { NavItem } from '../components/SidebarLayout';
 import { useAuth } from '../lib/AuthContext';
@@ -401,6 +402,40 @@ function LessonContentModal({ item, topicTitle, onSave, onClose }: {
     video_minutes: item.video_minutes,
     video_seconds: item.video_seconds,
   });
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [editorMode, setEditorMode] = useState<'visual' | 'code'>('visual');
+
+  useEffect(() => {
+    if (editorRef.current) {
+      editorRef.current.innerHTML = form.content;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const syncContent = () => {
+    if (editorRef.current) {
+      setForm(f => ({ ...f, content: editorRef.current!.innerHTML }));
+    }
+  };
+
+  const switchMode = (mode: 'visual' | 'code') => {
+    if (mode === 'code' && editorRef.current) {
+      setForm(f => ({ ...f, content: editorRef.current!.innerHTML }));
+    }
+    if (mode === 'visual') {
+      setTimeout(() => {
+        if (editorRef.current) editorRef.current.innerHTML = form.content;
+      }, 0);
+    }
+    setEditorMode(mode);
+  };
+
+  const execFormat = (cmd: string, value?: string) => {
+    document.execCommand(cmd, false, value ?? '');
+    editorRef.current?.focus();
+    syncContent();
+  };
+
   const hasChanges =
     form.title !== item.title ||
     form.content !== item.content ||
@@ -411,179 +446,301 @@ function LessonContentModal({ item, topicTitle, onSave, onClose }: {
     form.video_seconds !== item.video_seconds;
 
   const handleSave = () => {
-    onSave({ ...form, editing: false });
+    if (editorRef.current) {
+      onSave({ ...form, content: editorRef.current.innerHTML, editing: false });
+    } else {
+      onSave({ ...form, editing: false });
+    }
     onClose();
   };
 
+  const TB_DIVIDER = 'divider';
+  const toolbarItems: (typeof TB_DIVIDER | { cmd: string; icon: React.ElementType; title: string; action?: () => void })[] = [
+    { cmd: 'bold',                icon: Bold,        title: 'Bold' },
+    { cmd: 'italic',              icon: Italic,      title: 'Italic' },
+    { cmd: 'underline',           icon: Underline,   title: 'Underline' },
+    TB_DIVIDER,
+    { cmd: 'insertUnorderedList', icon: List,        title: 'Bullet List' },
+    { cmd: 'insertOrderedList',   icon: ListOrdered, title: 'Numbered List' },
+    { cmd: 'blockquote',          icon: Quote,       title: 'Blockquote', action: () => execFormat('formatBlock', 'blockquote') },
+    TB_DIVIDER,
+    { cmd: 'justifyLeft',         icon: AlignLeft,   title: 'Align Left' },
+    { cmd: 'justifyCenter',       icon: AlignCenter, title: 'Align Center' },
+    { cmd: 'justifyRight',        icon: AlignRight,  title: 'Align Right' },
+    TB_DIVIDER,
+    { cmd: 'createLink',          icon: Link,        title: 'Link', action: () => { const u = window.prompt('Enter URL:'); if (u) execFormat('createLink', u); } },
+    { cmd: 'unlink',              icon: Link2Off,    title: 'Unlink' },
+    TB_DIVIDER,
+    { cmd: 'insertHorizontalRule',icon: Minus,       title: 'Horizontal Rule' },
+    { cmd: 'codeblock',           icon: Code,        title: 'Code', action: () => execFormat('formatBlock', 'pre') },
+    { cmd: 'table',               icon: Table2,      title: 'Table' },
+  ];
+
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-white animate-fadeIn">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-white shadow-sm flex-shrink-0">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-[#f0f0f1] animate-fadeIn">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between px-6 py-2.5 bg-[#1d2327] flex-shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           {hasChanges && (
-            <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1 rounded-lg text-xs font-semibold flex-shrink-0">
-              <AlertTriangle size={12} /> Unsaved Changes
-            </div>
+            <span className="flex items-center gap-1.5 text-amber-300 text-xs font-semibold flex-shrink-0">
+              <AlertTriangle size={11} /> Unsaved Changes
+            </span>
           )}
-          <span className="text-sm text-slate-400 truncate">Topic: <span className="font-semibold text-slate-700">{topicTitle}</span></span>
+          {hasChanges && <span className="text-white/20 text-sm">|</span>}
+          <span className="text-sm text-white/60 truncate">
+            Topic: <span className="text-white/90 font-medium">{topicTitle}</span>
+          </span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 text-sm font-medium text-white/70 border border-white/20 rounded hover:bg-white/10 transition-colors"
+          >
+            Cancel
+          </button>
           <button
             onClick={handleSave}
             disabled={!form.title.trim()}
-            className="flex items-center gap-1.5 px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors shadow"
+            className="px-5 py-1.5 bg-[#2271b1] hover:bg-[#135e96] disabled:opacity-40 text-white text-sm font-semibold rounded transition-colors"
           >
-            <Save size={14} /> Save
+            Save
           </button>
         </div>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto bg-slate-50">
+      {/* ── Body ── */}
+      <div className="flex-1 overflow-y-auto">
         <div className="max-w-6xl mx-auto p-6 flex flex-col lg:flex-row gap-6">
-          {/* Left — main content */}
-          <div className="flex-1 space-y-5">
+
+          {/* ── Left — Name + Content ── */}
+          <div className="flex-1 min-w-0 space-y-6">
+
             {/* Name */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-5">
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Name</label>
-              <input
-                autoFocus
-                value={form.title}
-                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                placeholder="Enter lesson title…"
-                className="w-full text-base font-semibold text-slate-900 bg-transparent border-b border-slate-200 pb-2 focus:outline-none focus:border-rose-400 transition"
-              />
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-sm font-semibold text-gray-800">Name</span>
+                <Sparkles size={13} className="text-[#c084fc]" />
+              </div>
+              <div className="relative">
+                <input
+                  autoFocus
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="Lesson title…"
+                  className="w-full px-3 py-2 pr-9 bg-white border border-gray-300 rounded text-sm text-gray-800 shadow-sm focus:outline-none focus:border-[#2271b1] focus:ring-1 focus:ring-[#2271b1]/30 transition"
+                />
+                {form.title && (
+                  <button
+                    onClick={() => setForm(f => ({ ...f, title: '' }))}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Content editor */}
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Content</label>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-rose-600 font-semibold bg-rose-50 border border-rose-100 px-2 py-0.5 rounded">Visual</span>
-                  <span className="text-xs text-slate-400 font-medium px-2 py-0.5 rounded cursor-pointer hover:bg-slate-100">Code</span>
+            {/* Content */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-sm font-semibold text-gray-800">Content</span>
+                <Sparkles size={13} className="text-[#c084fc]" />
+              </div>
+
+              <div className="border border-gray-300 rounded bg-white shadow-sm overflow-hidden">
+                {/* Top row: Add media + Visual/Code tabs */}
+                <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-[#f6f7f7]">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-[#2271b1] border border-[#2271b1] rounded hover:bg-[#2271b1]/8 transition-colors"
+                  >
+                    <Upload size={11} />
+                    Add media
+                  </button>
+                  <div className="flex">
+                    <button
+                      onClick={() => switchMode('visual')}
+                      className={`px-3 py-1 text-xs font-medium border rounded-l transition-colors ${
+                        editorMode === 'visual'
+                          ? 'bg-white text-gray-700 border-gray-300 shadow-sm'
+                          : 'bg-[#f0f0f1] text-gray-500 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >Visual</button>
+                    <button
+                      onClick={() => switchMode('code')}
+                      className={`px-3 py-1 text-xs font-medium border-t border-b border-r rounded-r transition-colors ${
+                        editorMode === 'code'
+                          ? 'bg-white text-gray-700 border-gray-300 shadow-sm'
+                          : 'bg-[#f0f0f1] text-gray-500 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >Code</button>
+                  </div>
+                </div>
+
+                {/* Toolbar (Visual mode only) */}
+                {editorMode === 'visual' && (
+                  <div className="flex items-center flex-wrap gap-0 px-2 py-1.5 border-b border-gray-200 bg-white">
+                    {/* Paragraph format dropdown */}
+                    <div className="relative mr-1">
+                      <select
+                        onChange={e => { execFormat('formatBlock', e.target.value); (e.target as HTMLSelectElement).value = 'p'; }}
+                        defaultValue="p"
+                        className="appearance-none pl-2 pr-6 py-1 text-xs border border-gray-300 rounded bg-white text-gray-700 focus:outline-none cursor-pointer hover:border-gray-400 transition-colors"
+                      >
+                        <option value="p">Paragraph</option>
+                        <option value="h1">Heading 1</option>
+                        <option value="h2">Heading 2</option>
+                        <option value="h3">Heading 3</option>
+                        <option value="h4">Heading 4</option>
+                      </select>
+                      <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                    </div>
+
+                    {toolbarItems.map((btn, idx) => {
+                      if (btn === TB_DIVIDER) {
+                        return <div key={`div-${idx}`} className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />;
+                      }
+                      return (
+                        <button
+                          key={btn.cmd}
+                          title={btn.title}
+                          type="button"
+                          onMouseDown={e => {
+                            e.preventDefault();
+                            btn.action ? btn.action() : execFormat(btn.cmd);
+                          }}
+                          className="p-1.5 rounded text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                        >
+                          <btn.icon size={14} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Editor area */}
+                {editorMode === 'visual' ? (
+                  <div
+                    ref={editorRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    onInput={syncContent}
+                    onBlur={syncContent}
+                    data-placeholder="Write lesson content here…"
+                    className="min-h-[260px] max-h-[480px] overflow-y-auto px-4 py-3 text-sm text-gray-800 focus:outline-none leading-relaxed"
+                    style={{ wordBreak: 'break-word' }}
+                  />
+                ) : (
+                  <textarea
+                    value={form.content}
+                    onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+                    placeholder="<p>Write HTML content here…</p>"
+                    className="w-full min-h-[260px] px-4 py-3 text-xs text-gray-700 font-mono bg-white focus:outline-none resize-y placeholder-gray-300"
+                  />
+                )}
+
+                {/* Resize handle row */}
+                <div className="flex justify-end px-2 py-0.5 border-t border-gray-100 bg-white">
+                  <svg width="12" height="12" viewBox="0 0 12 12" className="text-gray-300 opacity-60">
+                    <path d="M10 2L2 10M10 6L6 10M10 10L10 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
                 </div>
               </div>
-              {/* Toolbar */}
-              <div className="flex items-center flex-wrap gap-0.5 px-3 py-2 border-b border-slate-100 bg-slate-50">
-                {[
-                  { icon: Bold,        title: 'Bold' },
-                  { icon: Italic,      title: 'Italic' },
-                  { icon: Underline,   title: 'Underline' },
-                  { icon: List,        title: 'List' },
-                  { icon: AlignLeft,   title: 'Align Left' },
-                  { icon: AlignCenter, title: 'Align Center' },
-                  { icon: AlignRight,  title: 'Align Right' },
-                  { icon: Link,        title: 'Link' },
-                ].map(btn => (
-                  <button
-                    key={btn.title}
-                    title={btn.title}
-                    type="button"
-                    className="p-1.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
-                  >
-                    <btn.icon size={14} />
-                  </button>
-                ))}
-              </div>
-              <textarea
-                value={form.content}
-                onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
-                placeholder="Write the lesson content here…"
-                rows={12}
-                className="w-full px-5 py-4 text-sm text-slate-700 bg-white focus:outline-none resize-none placeholder-slate-300"
-              />
             </div>
+
           </div>
 
-          {/* Right sidebar */}
-          <div className="w-full lg:w-72 space-y-4 flex-shrink-0">
+          {/* ── Right sidebar ── */}
+          <div className="w-full lg:w-64 space-y-4 flex-shrink-0">
+
             {/* Featured Image */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4">
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Featured Image</label>
+            <div className="bg-white border border-gray-200 rounded shadow-sm p-4">
+              <p className="text-xs font-semibold text-gray-700 mb-3">Featured Image</p>
               {form.featured_image_url ? (
                 <div className="relative group mb-2">
-                  <img src={form.featured_image_url} alt="preview" className="w-full h-36 object-cover rounded-xl" />
+                  <img src={form.featured_image_url} alt="preview" className="w-full h-32 object-cover rounded" />
                   <button
                     onClick={() => setForm(f => ({ ...f, featured_image_url: '' }))}
-                    className="absolute top-2 right-2 p-1 bg-black/50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-1.5 right-1.5 p-1 bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                   >
-                    <X size={12} className="text-white" />
+                    <X size={11} className="text-white" />
                   </button>
                 </div>
               ) : (
-                <div className="w-full h-36 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300 mb-3">
-                  <Image size={24} />
-                  <span className="text-xs mt-1">No image</span>
+                <div className="w-full h-32 border-2 border-dashed border-gray-200 rounded flex flex-col items-center justify-center text-gray-300 mb-3 hover:border-gray-300 transition-colors">
+                  <Image size={22} />
+                  <span className="text-xs mt-1">Upload Image</span>
                 </div>
               )}
+              <button
+                type="button"
+                className="w-full flex items-center justify-center gap-1.5 py-2 border border-[#2271b1] text-[#2271b1] text-xs font-medium rounded hover:bg-[#2271b1]/5 transition-colors mb-2"
+              >
+                <Upload size={11} /> Upload Image
+              </button>
               <input
                 value={form.featured_image_url}
                 onChange={e => setForm(f => ({ ...f, featured_image_url: e.target.value }))}
-                placeholder="Paste image URL…"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-rose-400 transition"
+                placeholder="Or paste image URL…"
+                className="w-full px-2.5 py-1.5 bg-[#f6f7f7] border border-gray-200 rounded text-xs text-gray-600 focus:outline-none focus:border-[#2271b1] transition"
               />
-              <p className="text-xs text-slate-400 mt-1">JPEG, PNG, GIF, and WebP formats</p>
+              <p className="text-[10px] text-gray-400 mt-1">JPEG, PNG, GIF, and WebP formats, up to 512 MB</p>
             </div>
 
             {/* Video */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4">
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Video</label>
-              <div className="w-full h-28 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300 mb-3">
-                <Video size={22} />
-                <span className="text-xs mt-1">No video</span>
+            <div className="bg-white border border-gray-200 rounded shadow-sm p-4">
+              <p className="text-xs font-semibold text-gray-700 mb-3">Video</p>
+              <div className="w-full h-24 border-2 border-dashed border-gray-200 rounded flex flex-col items-center justify-center text-gray-300 mb-3">
+                <Video size={20} />
               </div>
+              <button
+                type="button"
+                className="w-full flex items-center justify-center gap-1.5 py-2 border border-[#2271b1] text-[#2271b1] text-xs font-medium rounded hover:bg-[#2271b1]/5 transition-colors mb-2"
+              >
+                <Upload size={11} /> Upload Video
+              </button>
               <input
                 value={form.video_url}
                 onChange={e => setForm(f => ({ ...f, video_url: e.target.value }))}
                 placeholder="Add from URL…"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-rose-400 transition"
+                className="w-full px-2.5 py-1.5 bg-[#f6f7f7] border border-gray-200 rounded text-xs text-gray-600 focus:outline-none focus:border-[#2271b1] transition"
               />
-              <p className="text-xs text-slate-400 mt-1">MP4, and WebM formats</p>
+              <p className="text-[10px] text-gray-400 mt-1">MP4, and WebM formats, up to 512 MB</p>
             </div>
 
             {/* Video Playback Time */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4">
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Video Playback Time</label>
+            <div className="bg-white border border-gray-200 rounded shadow-sm p-4">
+              <p className="text-xs font-semibold text-gray-700 mb-3">Video Playback Time</p>
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 flex-1">
-                  <input
-                    type="number" min={0} value={form.video_hours}
-                    onChange={e => setForm(f => ({ ...f, video_hours: Math.max(0, +e.target.value) }))}
-                    className="w-full px-2 py-2 rounded-lg border border-slate-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-rose-400 transition"
-                  />
-                  <span className="text-xs text-slate-500 flex-shrink-0">hour</span>
-                </div>
-                <div className="flex items-center gap-1.5 flex-1">
-                  <input
-                    type="number" min={0} max={59} value={form.video_minutes}
-                    onChange={e => setForm(f => ({ ...f, video_minutes: Math.max(0, Math.min(59, +e.target.value)) }))}
-                    className="w-full px-2 py-2 rounded-lg border border-slate-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-rose-400 transition"
-                  />
-                  <span className="text-xs text-slate-500 flex-shrink-0">min</span>
-                </div>
-                <div className="flex items-center gap-1.5 flex-1">
-                  <input
-                    type="number" min={0} max={59} value={form.video_seconds}
-                    onChange={e => setForm(f => ({ ...f, video_seconds: Math.max(0, Math.min(59, +e.target.value)) }))}
-                    className="w-full px-2 py-2 rounded-lg border border-slate-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-rose-400 transition"
-                  />
-                  <span className="text-xs text-slate-500 flex-shrink-0">sec</span>
-                </div>
+                {([
+                  { key: 'video_hours',   max: undefined, label: 'hour' },
+                  { key: 'video_minutes', max: 59,        label: 'min' },
+                  { key: 'video_seconds', max: 59,        label: 'sec' },
+                ] as const).map(f => (
+                  <div key={f.key} className="flex items-center gap-1 flex-1">
+                    <input
+                      type="number" min={0} max={f.max}
+                      value={form[f.key]}
+                      onChange={e => setForm(prev => ({ ...prev, [f.key]: Math.max(0, f.max ? Math.min(f.max, +e.target.value) : +e.target.value) }))}
+                      className="w-full px-1.5 py-1.5 border border-gray-300 rounded text-xs text-center focus:outline-none focus:border-[#2271b1] transition"
+                    />
+                    <span className="text-[10px] text-gray-500 flex-shrink-0">{f.label}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
             {/* Exercise Files */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4">
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Exercise Files</label>
+            <div className="bg-white border border-gray-200 rounded shadow-sm p-4">
+              <p className="text-xs font-semibold text-gray-700 mb-3">Exercise Files</p>
               <button
                 type="button"
-                className="w-full flex items-center justify-center gap-2 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 py-2 border border-[#2271b1] text-[#2271b1] text-xs font-medium rounded hover:bg-[#2271b1]/5 transition-colors"
               >
-                <Paperclip size={14} /> Upload Attachment
+                <Paperclip size={11} /> Upload Attachment
               </button>
             </div>
+
           </div>
         </div>
       </div>
