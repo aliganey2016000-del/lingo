@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   ChevronLeft, ChevronRight, BookOpen, Video, Layers, Globe, Lock,
   Clock, Award, Star, Users2, Monitor, CheckCircle, FileText,
-  PlayCircle, BookMarked, ChevronDown, X,
+  PlayCircle, BookMarked, ChevronDown,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -23,7 +23,6 @@ interface CourseData {
   visibility: string;
   difficulty_level: string;
   is_published: boolean;
-  topic_count: number;
 }
 
 interface Props {
@@ -41,7 +40,7 @@ export default function CoursePreviewPage({ courseId, onBack }: Props) {
   useEffect(() => {
     (async () => {
       const [{ data: c }, { data: t }] = await Promise.all([
-        supabase.from('courses').select('id,title,description,thumbnail_url,pricing_model,visibility,difficulty_level,is_published,topic_count').eq('id', courseId).single(),
+        supabase.from('courses').select('id,title,description,thumbnail_url,pricing_model,visibility,difficulty_level,is_published').eq('id', courseId).single(),
         supabase.from('course_topics').select('id,title,summary,sort_order,course_topic_items(id,type,title,video_url)').eq('course_id', courseId).order('sort_order'),
       ]);
       if (c) setCourse(c as CourseData);
@@ -95,7 +94,7 @@ export default function CoursePreviewPage({ courseId, onBack }: Props) {
     'bg-rose-500/20 text-rose-300 border-rose-500/30';
 
   const sidebarFeatures = [
-    { icon: Layers,    text: `${course.topic_count} ${course.topic_count === 1 ? 'section' : 'sections'}` },
+    { icon: Layers,    text: `${topics.length} ${topics.length === 1 ? 'section' : 'sections'}` },
     { icon: BookOpen,  text: `${totalItems} ${totalItems === 1 ? 'lesson' : 'lessons'}` },
     ...(videoCount > 0 ? [{ icon: Video,  text: `${videoCount} video ${videoCount === 1 ? 'lesson' : 'lessons'}` }] : []),
     { icon: Globe,     text: course.visibility === 'public' ? 'Open to all students' : 'Invite only' },
@@ -210,7 +209,7 @@ export default function CoursePreviewPage({ courseId, onBack }: Props) {
           {/* Stats strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { icon: Layers,    label: 'Sections', value: String(course.topic_count),       color: 'text-rose-500',   bg: 'bg-rose-50 border-rose-100'    },
+              { icon: Layers,    label: 'Sections', value: String(topics.length),             color: 'text-rose-500',   bg: 'bg-rose-50 border-rose-100'    },
               { icon: BookOpen,  label: 'Lessons',  value: String(totalItems),                color: 'text-blue-500',   bg: 'bg-blue-50 border-blue-100'    },
               { icon: Video,     label: 'Videos',   value: String(videoCount),                color: 'text-violet-500', bg: 'bg-violet-50 border-violet-100' },
               { icon: Award,     label: 'Level',    value: course.difficulty_level,           color: 'text-amber-500',  bg: 'bg-amber-50 border-amber-100'  },
