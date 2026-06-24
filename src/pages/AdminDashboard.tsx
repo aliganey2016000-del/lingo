@@ -88,6 +88,7 @@ interface TopicItem {
   video_hours: number;
   video_minutes: number;
   video_seconds: number;
+  attachments: { name: string; url: string; size: string }[];
 }
 
 interface CurriculumTopic {
@@ -401,9 +402,14 @@ function LessonContentModal({ item, topicTitle, onSave, onClose }: {
     video_hours: item.video_hours,
     video_minutes: item.video_minutes,
     video_seconds: item.video_seconds,
+    attachments: item.attachments,
   });
   const editorRef = useRef<HTMLDivElement>(null);
+  const imageInputRef  = useRef<HTMLInputElement>(null);
+  const videoInputRef  = useRef<HTMLInputElement>(null);
+  const attachInputRef = useRef<HTMLInputElement>(null);
   const [editorMode, setEditorMode] = useState<'visual' | 'code'>('visual');
+  const [uploading, setUploading] = useState({ image: false, video: false, attachment: false });
 
   useEffect(() => {
     if (editorRef.current) {
@@ -436,6 +442,54 @@ function LessonContentModal({ item, topicTitle, onSave, onClose }: {
     syncContent();
   };
 
+  const uploadToStorage = async (file: File, folder: string): Promise<string | null> => {
+    const ext = file.name.split('.').pop() ?? 'bin';
+    const path = `${folder}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+    const { data, error } = await supabase.storage.from('lesson-media').upload(path, file);
+    if (error || !data) return null;
+    const { data: { publicUrl } } = supabase.storage.from('lesson-media').getPublicUrl(data.path);
+    return publicUrl;
+  };
+
+  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(u => ({ ...u, image: true }));
+    const url = await uploadToStorage(file, 'images');
+    if (url) setForm(f => ({ ...f, featured_image_url: url }));
+    setUploading(u => ({ ...u, image: false }));
+    e.target.value = '';
+  };
+
+  const handleVideoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(u => ({ ...u, video: true }));
+    const url = await uploadToStorage(file, 'videos');
+    if (url) setForm(f => ({ ...f, video_url: url }));
+    setUploading(u => ({ ...u, video: false }));
+    e.target.value = '';
+  };
+
+  const handleAttachFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    setUploading(u => ({ ...u, attachment: true }));
+    const results = await Promise.all(files.map(async file => {
+      const url = await uploadToStorage(file, 'attachments');
+      const kb = Math.round(file.size / 1024);
+      const size = kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
+      return url ? { name: file.name, url, size } : null;
+    }));
+    const valid = results.filter(Boolean) as { name: string; url: string; size: string }[];
+    if (valid.length) setForm(f => ({ ...f, attachments: [...f.attachments, ...valid] }));
+    setUploading(u => ({ ...u, attachment: false }));
+    e.target.value = '';
+  };
+
+  const removeAttachment = (idx: number) =>
+    setForm(f => ({ ...f, attachments: f.attachments.filter((_, i) => i !== idx) }));
+
   const hasChanges =
     form.title !== item.title ||
     form.content !== item.content ||
@@ -443,14 +497,12 @@ function LessonContentModal({ item, topicTitle, onSave, onClose }: {
     form.video_url !== item.video_url ||
     form.video_hours !== item.video_hours ||
     form.video_minutes !== item.video_minutes ||
-    form.video_seconds !== item.video_seconds;
+    form.video_seconds !== item.video_seconds ||
+    form.attachments.length !== item.attachments.length;
 
   const handleSave = () => {
-    if (editorRef.current) {
-      onSave({ ...form, content: editorRef.current.innerHTML, editing: false });
-    } else {
-      onSave({ ...form, editing: false });
-    }
+    const content = editorRef.current ? editorRef.current.innerHTML : form.content;
+    onSave({ ...form, content, editing: false });
     onClose();
   };
 
@@ -657,26 +709,35 @@ function LessonContentModal({ item, topicTitle, onSave, onClose }: {
             <div className="bg-white border border-gray-200 rounded shadow-sm p-4">
               <p className="text-xs font-semibold text-gray-700 mb-3">Featured Image</p>
               {form.featured_image_url ? (
-                <div className="relative group mb-2">
+                <div className="relative group mb-3">
                   <img src={form.featured_image_url} alt="preview" className="w-full h-32 object-cover rounded" />
                   <button
                     onClick={() => setForm(f => ({ ...f, featured_image_url: '' }))}
-                    className="absolute top-1.5 right-1.5 p-1 bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-1.5 right-1.5 p-1 bg-black/60 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <X size={11} className="text-white" />
                   </button>
                 </div>
               ) : (
-                <div className="w-full h-32 border-2 border-dashed border-gray-200 rounded flex flex-col items-center justify-center text-gray-300 mb-3 hover:border-gray-300 transition-colors">
+                <div
+                  onClick={() => imageInputRef.current?.click()}
+                  className="w-full h-32 border-2 border-dashed border-gray-200 rounded flex flex-col items-center justify-center text-gray-300 mb-3 hover:border-[#2271b1] hover:text-[#2271b1]/50 transition-colors cursor-pointer"
+                >
                   <Image size={22} />
-                  <span className="text-xs mt-1">Upload Image</span>
+                  <span className="text-xs mt-1">Click to upload</span>
                 </div>
               )}
+              <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleImageFile} />
               <button
                 type="button"
-                className="w-full flex items-center justify-center gap-1.5 py-2 border border-[#2271b1] text-[#2271b1] text-xs font-medium rounded hover:bg-[#2271b1]/5 transition-colors mb-2"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={uploading.image}
+                className="w-full flex items-center justify-center gap-1.5 py-2 border border-[#2271b1] text-[#2271b1] text-xs font-medium rounded hover:bg-[#2271b1]/5 disabled:opacity-60 transition-colors mb-2"
               >
-                <Upload size={11} /> Upload Image
+                {uploading.image
+                  ? <><div className="w-3 h-3 border-2 border-[#2271b1] border-t-transparent rounded-full animate-spin" /> Uploading…</>
+                  : <><Upload size={11} /> Upload Image</>
+                }
               </button>
               <input
                 value={form.featured_image_url}
@@ -690,14 +751,43 @@ function LessonContentModal({ item, topicTitle, onSave, onClose }: {
             {/* Video */}
             <div className="bg-white border border-gray-200 rounded shadow-sm p-4">
               <p className="text-xs font-semibold text-gray-700 mb-3">Video</p>
-              <div className="w-full h-24 border-2 border-dashed border-gray-200 rounded flex flex-col items-center justify-center text-gray-300 mb-3">
-                <Video size={20} />
-              </div>
+              {form.video_url ? (
+                <div className="relative group mb-3">
+                  <video
+                    src={form.video_url}
+                    className="w-full h-28 object-cover rounded bg-black"
+                    controls={false}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded">
+                    <Video size={24} className="text-white" />
+                  </div>
+                  <button
+                    onClick={() => setForm(f => ({ ...f, video_url: '' }))}
+                    className="absolute top-1.5 right-1.5 p-1 bg-black/60 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X size={11} className="text-white" />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  onClick={() => videoInputRef.current?.click()}
+                  className="w-full h-28 border-2 border-dashed border-gray-200 rounded flex flex-col items-center justify-center text-gray-300 mb-3 hover:border-[#2271b1] hover:text-[#2271b1]/50 transition-colors cursor-pointer"
+                >
+                  <Video size={20} />
+                  <span className="text-xs mt-1">Click to upload</span>
+                </div>
+              )}
+              <input ref={videoInputRef} type="file" accept="video/mp4,video/webm" className="hidden" onChange={handleVideoFile} />
               <button
                 type="button"
-                className="w-full flex items-center justify-center gap-1.5 py-2 border border-[#2271b1] text-[#2271b1] text-xs font-medium rounded hover:bg-[#2271b1]/5 transition-colors mb-2"
+                onClick={() => videoInputRef.current?.click()}
+                disabled={uploading.video}
+                className="w-full flex items-center justify-center gap-1.5 py-2 border border-[#2271b1] text-[#2271b1] text-xs font-medium rounded hover:bg-[#2271b1]/5 disabled:opacity-60 transition-colors mb-2"
               >
-                <Upload size={11} /> Upload Video
+                {uploading.video
+                  ? <><div className="w-3 h-3 border-2 border-[#2271b1] border-t-transparent rounded-full animate-spin" /> Uploading…</>
+                  : <><Upload size={11} /> Upload Video</>
+                }
               </button>
               <input
                 value={form.video_url}
@@ -733,11 +823,34 @@ function LessonContentModal({ item, topicTitle, onSave, onClose }: {
             {/* Exercise Files */}
             <div className="bg-white border border-gray-200 rounded shadow-sm p-4">
               <p className="text-xs font-semibold text-gray-700 mb-3">Exercise Files</p>
+              {form.attachments.length > 0 && (
+                <div className="mb-3 space-y-1.5">
+                  {form.attachments.map((att, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-[#f6f7f7] border border-gray-200 rounded px-2.5 py-1.5">
+                      <Paperclip size={11} className="text-gray-400 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-700 truncate">{att.name}</p>
+                        <p className="text-[10px] text-gray-400">{att.size}</p>
+                      </div>
+                      <a href={att.url} target="_blank" rel="noreferrer" className="text-[#2271b1] hover:underline text-[10px] font-medium flex-shrink-0">View</a>
+                      <button onClick={() => removeAttachment(idx)} className="p-0.5 hover:bg-red-50 rounded flex-shrink-0">
+                        <X size={11} className="text-red-400" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input ref={attachInputRef} type="file" multiple accept=".pdf,.doc,.docx,.zip,.pptx,.xlsx,.txt" className="hidden" onChange={handleAttachFile} />
               <button
                 type="button"
-                className="w-full flex items-center justify-center gap-1.5 py-2 border border-[#2271b1] text-[#2271b1] text-xs font-medium rounded hover:bg-[#2271b1]/5 transition-colors"
+                onClick={() => attachInputRef.current?.click()}
+                disabled={uploading.attachment}
+                className="w-full flex items-center justify-center gap-1.5 py-2 border border-[#2271b1] text-[#2271b1] text-xs font-medium rounded hover:bg-[#2271b1]/5 disabled:opacity-60 transition-colors"
               >
-                <Paperclip size={11} /> Upload Attachment
+                {uploading.attachment
+                  ? <><div className="w-3 h-3 border-2 border-[#2271b1] border-t-transparent rounded-full animate-spin" /> Uploading…</>
+                  : <><Paperclip size={11} /> Upload Attachment</>
+                }
               </button>
             </div>
 
@@ -805,6 +918,7 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
       tempId: crypto.randomUUID(), type, title: '', editing: true,
       content: '', featured_image_url: '', video_url: '',
       video_hours: 0, video_minutes: 0, video_seconds: 0,
+      attachments: [],
     };
     setTopics(prev => prev.map(t =>
       t.tempId === topicTempId ? { ...t, items: [...t.items, item] } : t
@@ -874,6 +988,7 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
               content: it.content, featured_image_url: it.featured_image_url,
               video_url: it.video_url, video_hours: it.video_hours,
               video_minutes: it.video_minutes, video_seconds: it.video_seconds,
+              attachments: it.attachments.map(a => a.url),
             });
         }
       }
