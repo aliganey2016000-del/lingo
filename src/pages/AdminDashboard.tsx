@@ -69,6 +69,7 @@ interface CourseFormData {
   difficulty_level: string;
   is_public: boolean;
   tags: string;
+  categoryIds: string[];
   what_will_learn: string;
   target_audience: string;
   duration_hours: number;
@@ -880,6 +881,7 @@ const defaultCourseForm: CourseFormData = {
   difficulty_level: 'intermediate',
   is_public: false,
   tags: '',
+  categoryIds: [],
   what_will_learn: '',
   target_audience: '',
   duration_hours: 0,
@@ -905,6 +907,32 @@ function CourseBuilderModal({ onClose, onSaved, authorId, editCourseId }: {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(isEdit);
   const [lessonContentEdit, setLessonContentEdit] = useState<{ topicTempId: string; item: TopicItem } | null>(null);
+  const [allCategories, setAllCategories] = useState<{ id: string; name: string }[]>([]);
+  const [catSearch, setCatSearch] = useState('');
+  const [addingCat, setAddingCat] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+
+  useEffect(() => {
+    supabase.from('course_categories').select('id, name').order('name').then(({ data }) => {
+      if (data) setAllCategories(data);
+    });
+  }, []);
+
+  const handleAddCategory = async () => {
+    const name = newCatName.trim();
+    if (!name) return;
+    const { data } = await supabase.from('course_categories').insert({ name }).select('id, name').single();
+    if (data) {
+      setAllCategories(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm(f => ({ ...f, categoryIds: [...f.categoryIds, data.id] }));
+      setNewCatName('');
+      setAddingCat(false);
+    }
+  };
+
+  const filteredCategories = allCategories.filter(c =>
+    c.name.toLowerCase().includes(catSearch.toLowerCase())
+  );
 
   useEffect(() => {
     if (!editCourseId) return;
@@ -922,6 +950,7 @@ function CourseBuilderModal({ onClose, onSaved, authorId, editCourseId }: {
           difficulty_level: cd.difficulty_level ?? 'intermediate',
           is_public: cd.is_public ?? false,
           tags: (cd.tags ?? []).join(', '),
+          categoryIds: [],
           what_will_learn: cd.what_will_learn ?? '',
           target_audience: cd.target_audience ?? '',
           duration_hours: cd.duration_hours ?? 0,
@@ -929,6 +958,13 @@ function CourseBuilderModal({ onClose, onSaved, authorId, editCourseId }: {
           materials_included: cd.materials_included ?? cd.materials ?? '',
           requirements: cd.requirements ?? '',
         });
+        const { data: catAssign } = await supabase
+          .from('course_category_assignments')
+          .select('category_id')
+          .eq('course_id', editCourseId);
+        if (catAssign) {
+          setForm(f => ({ ...f, categoryIds: catAssign.map((r: any) => r.category_id) }));
+        }
       }
       const { data: tds } = await supabase
         .from('course_topics')
@@ -1109,6 +1145,14 @@ function CourseBuilderModal({ onClose, onSaved, authorId, editCourseId }: {
       }
 
       const topicCount = await saveCurriculumForCourse(courseData.id as string);
+
+      const courseId = courseData.id as string;
+      await supabase.from('course_category_assignments').delete().eq('course_id', courseId);
+      if (form.categoryIds.length > 0) {
+        await supabase.from('course_category_assignments').insert(
+          form.categoryIds.map(catId => ({ course_id: courseId, category_id: catId }))
+        );
+      }
 
       onSaved({
         id: courseData.id as string,
@@ -1404,6 +1448,79 @@ function CourseBuilderModal({ onClose, onSaved, authorId, editCourseId }: {
                     </label>
                   ))}
                 </div>
+              </div>
+
+              {/* Categories */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Categories</label>
+                {/* Search */}
+                <div className="relative mb-2">
+                  <Search size={12} className="absolute left-2.5 top-2.5 text-slate-400 pointer-events-none" />
+                  <input
+                    value={catSearch}
+                    onChange={e => setCatSearch(e.target.value)}
+                    placeholder="Search"
+                    className="w-full pl-7 pr-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400 transition"
+                  />
+                </div>
+                {/* Checklist */}
+                <div className="max-h-44 overflow-y-auto space-y-2 mb-3 pr-1">
+                  {filteredCategories.length === 0 ? (
+                    <p className="text-xs text-slate-400 text-center py-3">
+                      {catSearch ? 'No matches found' : 'No categories yet'}
+                    </p>
+                  ) : (
+                    filteredCategories.map(cat => (
+                      <label key={cat.id} className="flex items-center gap-2.5 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={form.categoryIds.includes(cat.id)}
+                          onChange={() => setForm(f => ({
+                            ...f,
+                            categoryIds: f.categoryIds.includes(cat.id)
+                              ? f.categoryIds.filter(id => id !== cat.id)
+                              : [...f.categoryIds, cat.id],
+                          }))}
+                          className="w-3.5 h-3.5 accent-rose-500 rounded cursor-pointer flex-shrink-0"
+                        />
+                        <span className="text-sm text-slate-700 group-hover:text-slate-900 truncate">{cat.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {/* Add category */}
+                {addingCat ? (
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      autoFocus
+                      value={newCatName}
+                      onChange={e => setNewCatName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleAddCategory(); if (e.key === 'Escape') { setAddingCat(false); setNewCatName(''); } }}
+                      placeholder="Category name…"
+                      className="flex-1 px-2.5 py-1.5 text-xs border border-rose-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-400 transition"
+                    />
+                    <button
+                      onClick={handleAddCategory}
+                      disabled={!newCatName.trim()}
+                      className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white text-xs font-bold rounded-lg transition"
+                    >
+                      Add
+                    </button>
+                    <button
+                      onClick={() => { setAddingCat(false); setNewCatName(''); }}
+                      className="px-2 py-1.5 text-slate-500 hover:bg-slate-100 text-xs rounded-lg transition"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setAddingCat(true)}
+                    className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                  >
+                    <Plus size={13} /> Add
+                  </button>
+                )}
               </div>
 
               {/* Tags */}
