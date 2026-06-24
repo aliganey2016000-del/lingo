@@ -5,7 +5,7 @@ import {
   GraduationCap, ChevronRight, Eye, EyeOff, Trash2,
   MoreVertical, Clock, FileText, AlertTriangle, X, Save,
   Crown, GraduationCap as StudentIcon,
-  RefreshCw, Edit3, Plus, GripVertical, ChevronLeft,
+  RefreshCw, Edit3, Plus, GripVertical, ChevronLeft, Copy,
   Upload, Globe, Lock, BookMarked, Video, Paperclip, Image,
   Bold, Italic, Underline, List, AlignLeft, AlignCenter, AlignRight, Link,
   ListOrdered, Quote, Link2Off, Minus, Code, Table2, ChevronDown, Sparkles,
@@ -983,6 +983,23 @@ function CourseBuilderModal({ onClose, onSaved, authorId, editCourseId }: {
   const removeTopic = (tempId: string) =>
     setTopics(prev => prev.filter(t => t.tempId !== tempId));
 
+  const duplicateTopic = (tempId: string) =>
+    setTopics(prev => {
+      const idx = prev.findIndex(t => t.tempId === tempId);
+      if (idx === -1) return prev;
+      const src = prev[idx];
+      const copy: CurriculumTopic = {
+        ...src,
+        tempId: crypto.randomUUID(),
+        title: `${src.title} (Copy)`,
+        editing: false,
+        items: src.items.map(it => ({ ...it, tempId: crypto.randomUUID(), editing: false })),
+      };
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+
   const addItem = (topicTempId: string, type: 'lesson' | 'quiz' | 'assignment') => {
     const item: TopicItem = {
       tempId: crypto.randomUUID(), type, title: '', editing: true,
@@ -1421,24 +1438,40 @@ function CourseBuilderModal({ onClose, onSaved, authorId, editCourseId }: {
                     </div>
                   ) : (
                     <div>
-                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-                        <div className="flex items-center gap-2">
-                          <GripVertical size={14} className="text-slate-300" />
-                          <span className="text-xs font-bold text-slate-400 uppercase">Topic {tIdx + 1}</span>
-                          <span className="font-bold text-slate-800 text-sm">{topic.title}</span>
+                      <div className="flex items-center justify-between px-3 sm:px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                          <GripVertical size={14} className="text-slate-300 flex-shrink-0 hidden sm:block" />
+                          <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wide flex-shrink-0 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded-md">
+                            {tIdx + 1}
+                          </span>
+                          <span className="font-bold text-slate-800 text-sm truncate">{topic.title}</span>
+                          {topic.items.length > 0 && (
+                            <span className="hidden sm:inline text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                              {topic.items.length} item{topic.items.length !== 1 ? 's' : ''}
+                            </span>
+                          )}
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-0.5 flex-shrink-0 ml-2">
                           <button
+                            title="Edit topic"
                             onClick={() => updateTopic(topic.tempId, { editing: true })}
-                            className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                            className="p-2 sm:p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
                           >
-                            <Edit3 size={13} className="text-slate-400" />
+                            <Edit3 size={13} className="text-slate-400 hover:text-slate-600 transition-colors" />
                           </button>
                           <button
-                            onClick={() => removeTopic(topic.tempId)}
-                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Duplicate topic"
+                            onClick={() => duplicateTopic(topic.tempId)}
+                            className="p-2 sm:p-1.5 hover:bg-blue-50 rounded-lg transition-colors group/dup"
                           >
-                            <Trash2 size={13} className="text-red-400" />
+                            <Copy size={13} className="text-slate-400 group-hover/dup:text-blue-500 transition-colors" />
+                          </button>
+                          <button
+                            title="Delete topic"
+                            onClick={() => removeTopic(topic.tempId)}
+                            className="p-2 sm:p-1.5 hover:bg-red-50 rounded-lg transition-colors group/del"
+                          >
+                            <Trash2 size={13} className="text-slate-400 group-hover/del:text-red-500 transition-colors" />
                           </button>
                         </div>
                       </div>
