@@ -333,13 +333,18 @@ function CourseCard({ course, onEdit, onDelete, onTogglePublish }: {
 }) {
   const cover = course.thumbnail_url || 'https://images.pexels.com/photos/301926/pexels-photo-301926.jpeg?auto=compress&cs=tinysrgb&w=600&h=300&fit=crop';
   const menuItems: ActionItem[] = [
-    { icon: Edit3,                                              label: 'Edit Course',                        onClick: onEdit },
-    { icon: course.is_published ? EyeOff : Eye,                label: course.is_published ? 'Unpublish' : 'Publish', onClick: onTogglePublish, divider: true },
-    { icon: Trash2,                                             label: 'Delete Course',                      onClick: onDelete, danger: true, divider: true },
+    { icon: Edit3,   label: 'Edit Course', onClick: onEdit },
+    { icon: course.is_published ? EyeOff : Eye, label: course.is_published ? 'Unpublish' : 'Publish', onClick: onTogglePublish, divider: true },
+    { icon: Trash2,  label: 'Delete Course', onClick: onDelete, danger: true, divider: true },
   ];
   return (
-    <div className="group bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-      <div className="relative h-40 overflow-hidden">
+    /* overflow-visible so the ActionMenu dropdown is never clipped */
+    <div
+      className="group relative bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 cursor-pointer"
+      onClick={onEdit}
+    >
+      {/* Image — keeps its own overflow-hidden for zoom effect */}
+      <div className="relative h-40 overflow-hidden rounded-t-3xl">
         <img src={cover} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent" />
         <div className="absolute top-3 left-3">
@@ -353,16 +358,17 @@ function CourseCard({ course, onEdit, onDelete, onTogglePublish }: {
             </span>
           )}
         </div>
-        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity lg:block">
-          <ActionMenu items={menuItems} />
-        </div>
-        <div className="lg:hidden absolute top-3 right-3">
-          <ActionMenu items={menuItems} />
-        </div>
         <div className="absolute bottom-0 left-0 right-0 px-4 pb-3">
           <h3 className="font-black text-white text-base leading-tight line-clamp-2">{course.title}</h3>
         </div>
       </div>
+
+      {/* 3-dot menu — positioned on the outer card (overflow-visible) so dropdown escapes */}
+      <div className="absolute top-3 right-3 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+        <ActionMenu items={menuItems} />
+      </div>
+
+      {/* Card body */}
       <div className="p-4">
         {course.description && (
           <p className="text-xs text-slate-500 line-clamp-2 mb-3">{course.description}</p>
@@ -880,11 +886,13 @@ const defaultCourseForm: CourseFormData = {
   requirements: '',
 };
 
-function CourseBuilderModal({ onClose, onSaved, authorId }: {
+function CourseBuilderModal({ onClose, onSaved, authorId, editCourseId }: {
   onClose: () => void;
   onSaved: (course: CourseRow) => void;
   authorId: string;
+  editCourseId?: string;
 }) {
+  const isEdit = !!editCourseId;
   const [step, setStep] = useState<CourseBuilderStep>(1);
   const [form, setForm] = useState<CourseFormData>(defaultCourseForm);
   const [activeOptionsTab, setActiveOptionsTab] = useState<'general' | 'drip' | 'enrollment'>('general');
@@ -893,7 +901,67 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
   const [publishing, setPublishing] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [loadingEdit, setLoadingEdit] = useState(isEdit);
   const [lessonContentEdit, setLessonContentEdit] = useState<{ topicTempId: string; item: TopicItem } | null>(null);
+
+  useEffect(() => {
+    if (!editCourseId) return;
+    const load = async () => {
+      setLoadingEdit(true);
+      const { data: cd } = await supabase.from('courses').select('*').eq('id', editCourseId).single();
+      if (cd) {
+        setForm({
+          title: cd.title ?? '',
+          description: cd.description ?? '',
+          thumbnail_url: cd.thumbnail_url ?? '',
+          intro_video_url: cd.intro_video_url ?? '',
+          pricing_model: cd.pricing_model ?? 'free',
+          visibility: cd.visibility ?? 'public',
+          difficulty_level: cd.difficulty_level ?? 'intermediate',
+          is_public: cd.is_public ?? false,
+          tags: (cd.tags ?? []).join(', '),
+          what_will_learn: cd.what_will_learn ?? '',
+          target_audience: cd.target_audience ?? '',
+          duration_hours: cd.duration_hours ?? 0,
+          duration_minutes_extra: cd.duration_minutes ?? 0,
+          materials_included: cd.materials_included ?? cd.materials ?? '',
+          requirements: cd.requirements ?? '',
+        });
+      }
+      const { data: tds } = await supabase
+        .from('course_topics')
+        .select('*, course_topic_items(*)')
+        .eq('course_id', editCourseId)
+        .order('sort_order');
+      if (tds) {
+        setTopics(tds.map(t => ({
+          tempId: t.id,
+          title: t.title,
+          summary: t.summary ?? '',
+          editing: false,
+          items: ((t.course_topic_items ?? []) as Record<string, unknown>[])
+            .sort((a, b) => (a.sort_order as number) - (b.sort_order as number))
+            .map(it => ({
+              tempId: it.id as string,
+              type: (it.type as TopicItem['type']) ?? 'lesson',
+              title: it.title as string,
+              editing: false,
+              content: (it.content as string) ?? '',
+              featured_image_url: (it.featured_image_url as string) ?? '',
+              video_url: (it.video_url as string) ?? '',
+              video_hours: (it.video_hours as number) ?? 0,
+              video_minutes: (it.video_minutes as number) ?? 0,
+              video_seconds: (it.video_seconds as number) ?? 0,
+              attachments: ((it.attachments as string[]) ?? []).map(url => ({
+                name: url.split('/').pop() ?? 'file', url, size: '',
+              })),
+            })),
+        })));
+      }
+      setLoadingEdit(false);
+    };
+    load();
+  }, [editCourseId]);
 
   const slugify = (t: string) =>
     t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -939,6 +1007,57 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
       t.tempId === topicTempId ? { ...t, items: t.items.filter(i => i.tempId !== itemTempId) } : t
     ));
 
+  const coursePayload = (publish: boolean) => ({
+    title: form.title.trim(),
+    description: form.description,
+    thumbnail_url: form.thumbnail_url || null,
+    intro_video_url: form.intro_video_url || null,
+    pricing_model: form.pricing_model,
+    visibility: form.visibility,
+    difficulty_level: form.difficulty_level,
+    is_public: form.is_public,
+    is_published: publish,
+    status: publish ? 'published' : 'draft',
+    what_will_learn: form.what_will_learn,
+    target_audience: form.target_audience,
+    duration_hours: form.duration_hours,
+    duration_minutes: form.duration_minutes_extra,
+    materials: form.materials_included,
+    materials_included: form.materials_included,
+    requirements: form.requirements,
+    tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+  });
+
+  const saveCurriculumForCourse = async (courseId: string) => {
+    if (isEdit) {
+      await supabase.from('course_topics').delete().eq('course_id', courseId);
+    }
+    const validTopics = topics.filter(t => t.title.trim());
+    for (let i = 0; i < validTopics.length; i++) {
+      const tp = validTopics[i];
+      const { data: tpData, error: tpErr } = await supabase
+        .from('course_topics')
+        .insert({ course_id: courseId, title: tp.title.trim(), summary: tp.summary, sort_order: i })
+        .select().single();
+      if (tpErr) { console.error('Topic error:', tpErr); continue; }
+      if (tpData) {
+        const validItems = tp.items.filter(it => it.title.trim());
+        for (let j = 0; j < validItems.length; j++) {
+          const it = validItems[j];
+          const { error: itErr } = await supabase.from('course_topic_items').insert({
+            topic_id: tpData.id, type: it.type, title: it.title.trim(), sort_order: j,
+            content: it.content, featured_image_url: it.featured_image_url,
+            video_url: it.video_url, video_hours: it.video_hours,
+            video_minutes: it.video_minutes, video_seconds: it.video_seconds,
+            attachments: it.attachments.map(a => a.url),
+          });
+          if (itErr) console.error('Item error:', itErr);
+        }
+      }
+    }
+    return validTopics.length;
+  };
+
   const handleSave = async (publish: boolean) => {
     if (!form.title.trim()) {
       setSaveError('Please enter a course title before saving.');
@@ -950,82 +1069,39 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
     publish ? setPublishing(true) : setSaving(true);
 
     try {
-      const slug = slugify(form.title) + '-' + Date.now();
-      const { data: courseData, error: courseError } = await supabase
-        .from('courses')
-        .insert({
-          title: form.title.trim(),
-          slug,
-          description: form.description,
-          thumbnail_url: form.thumbnail_url || null,
-          intro_video_url: form.intro_video_url || null,
-          pricing_model: form.pricing_model,
-          visibility: form.visibility,
-          difficulty_level: form.difficulty_level,
-          is_public: form.is_public,
-          is_published: publish,
-          status: publish ? 'published' : 'draft',
-          what_will_learn: form.what_will_learn,
-          target_audience: form.target_audience,
-          duration_hours: form.duration_hours,
-          duration_minutes: form.duration_minutes_extra,
-          materials: form.materials_included,
-          materials_included: form.materials_included,
-          requirements: form.requirements,
-          tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-          author_id: authorId,
-        })
-        .select()
-        .single();
+      let courseData: Record<string, unknown> | null = null;
 
-      if (courseError || !courseData) {
-        setSaveError(courseError?.message ?? 'Failed to save course. Please try again.');
-        setSaving(false);
-        setPublishing(false);
-        return;
+      if (isEdit && editCourseId) {
+        const { data, error } = await supabase
+          .from('courses')
+          .update(coursePayload(publish))
+          .eq('id', editCourseId)
+          .select().single();
+        if (error || !data) { setSaveError(error?.message ?? 'Update failed.'); setSaving(false); setPublishing(false); return; }
+        courseData = data as Record<string, unknown>;
+      } else {
+        const slug = slugify(form.title) + '-' + Date.now();
+        const { data, error } = await supabase
+          .from('courses')
+          .insert({ ...coursePayload(publish), slug, author_id: authorId })
+          .select().single();
+        if (error || !data) { setSaveError(error?.message ?? 'Save failed.'); setSaving(false); setPublishing(false); return; }
+        courseData = data as Record<string, unknown>;
       }
 
-      const savedTopics = topics.filter(t => t.title.trim());
-      for (let i = 0; i < savedTopics.length; i++) {
-        const tp = savedTopics[i];
-        const { data: topicData, error: topicError } = await supabase
-          .from('course_topics')
-          .insert({ course_id: courseData.id, title: tp.title.trim(), summary: tp.summary, sort_order: i })
-          .select()
-          .single();
-        if (topicError) {
-          console.error('Topic insert error:', topicError);
-          continue;
-        }
-        if (topicData) {
-          const validItems = tp.items.filter(it => it.title.trim());
-          for (let j = 0; j < validItems.length; j++) {
-            const it = validItems[j];
-            const { error: itemError } = await supabase
-              .from('course_topic_items')
-              .insert({
-                topic_id: topicData.id, type: it.type, title: it.title.trim(), sort_order: j,
-                content: it.content, featured_image_url: it.featured_image_url,
-                video_url: it.video_url, video_hours: it.video_hours,
-                video_minutes: it.video_minutes, video_seconds: it.video_seconds,
-                attachments: it.attachments.map(a => a.url),
-              });
-            if (itemError) console.error('Item insert error:', itemError);
-          }
-        }
-      }
+      const topicCount = await saveCurriculumForCourse(courseData.id as string);
 
       onSaved({
-        id: courseData.id,
-        title: courseData.title,
-        description: courseData.description ?? '',
-        thumbnail_url: courseData.thumbnail_url,
-        pricing_model: courseData.pricing_model,
-        visibility: courseData.visibility,
-        difficulty_level: courseData.difficulty_level,
-        is_published: courseData.is_published ?? publish,
-        created_at: courseData.created_at,
-        topic_count: savedTopics.length,
+        id: courseData.id as string,
+        title: courseData.title as string,
+        description: (courseData.description as string) ?? '',
+        thumbnail_url: courseData.thumbnail_url as string | null,
+        pricing_model: courseData.pricing_model as string,
+        visibility: courseData.visibility as string,
+        difficulty_level: courseData.difficulty_level as string,
+        is_published: (courseData.is_published as boolean) ?? publish,
+        created_at: courseData.created_at as string,
+        topic_count: topicCount,
       });
 
       setSaveSuccess(true);
@@ -1046,6 +1122,15 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
     { num: 3, label: 'Additional' },
   ];
 
+  if (loadingEdit) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white gap-4">
+        <div className="w-10 h-10 border-4 border-rose-200 border-t-rose-600 rounded-full animate-spin" />
+        <p className="text-sm font-medium text-slate-500">Loading course…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white">
       {/* Top bar */}
@@ -1055,7 +1140,7 @@ function CourseBuilderModal({ onClose, onSaved, authorId }: {
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center">
               <BookMarked size={14} className="text-white" />
             </div>
-            <span className="font-bold text-slate-800 text-sm">Course Builder</span>
+            <span className="font-bold text-slate-800 text-sm">{isEdit ? 'Edit Course' : 'Course Builder'}</span>
           </div>
           {/* Step indicators */}
           <div className="hidden sm:flex items-center gap-1">
@@ -1560,6 +1645,7 @@ export default function AdminDashboard() {
   const [deleteCourse, setDeleteCourse]   = useState<CourseRow | null>(null);
   const [editLesson, setEditLesson]       = useState<LessonRow | null>(null);
   const [showCourseBuilder, setShowCourseBuilder] = useState(false);
+  const [editCourseId, setEditCourseId] = useState<string | null>(null);
 
   const loadData = async () => {
     const [usersRes, lessonsRes, levelsRes, enrRes, progRes, profilesRes, coursesRes, topicsRes] = await Promise.all([
@@ -1967,7 +2053,7 @@ export default function AdminDashboard() {
                     <CourseCard
                       key={course.id}
                       course={course}
-                      onEdit={() => {}}
+                      onEdit={() => setEditCourseId(course.id)}
                       onDelete={() => setDeleteCourse(course)}
                       onTogglePublish={() => handleToggleCoursePublish(course.id)}
                     />
@@ -2051,6 +2137,14 @@ export default function AdminDashboard() {
           authorId={profile.id}
           onClose={() => setShowCourseBuilder(false)}
           onSaved={course => setCourses(prev => [course, ...prev])}
+        />
+      )}
+      {editCourseId && profile && (
+        <CourseBuilderModal
+          authorId={profile.id}
+          editCourseId={editCourseId}
+          onClose={() => setEditCourseId(null)}
+          onSaved={updated => setCourses(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } : c))}
         />
       )}
     </>
