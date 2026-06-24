@@ -5,7 +5,7 @@ import {
   GraduationCap, ChevronRight, Eye, EyeOff, Trash2,
   MoreVertical, Clock, FileText, AlertTriangle, X, Save,
   Crown, GraduationCap as StudentIcon,
-  RefreshCw, Edit3, Plus, GripVertical, ChevronLeft, Copy,
+  RefreshCw, Edit3, Plus, GripVertical, ChevronLeft, Copy, Monitor,
   Upload, Globe, Lock, BookMarked, Video, Paperclip, Image,
   Bold, Italic, Underline, List, AlignLeft, AlignCenter, AlignRight, Link,
   ListOrdered, Quote, Link2Off, Minus, Code, Table2, ChevronDown, Sparkles,
@@ -324,18 +324,207 @@ function UserActionMenu({ user, onChangeRole, onDelete }: {
   return <ActionMenu items={items} />;
 }
 
+// ── Course Preview Modal ─────────────────────────────────────────────────────
+interface PreviewTopic {
+  id: string;
+  title: string;
+  summary: string;
+  sort_order: number;
+  items: { id: string; type: string; title: string; video_url: string }[];
+}
+
+function CoursePreviewModal({ course, onClose }: { course: CourseRow; onClose: () => void }) {
+  const [topics, setTopics] = useState<PreviewTopic[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('course_topics')
+        .select('id, title, summary, sort_order, course_topic_items(id, type, title, video_url)')
+        .eq('course_id', course.id)
+        .order('sort_order');
+      if (data) {
+        const mapped: PreviewTopic[] = data.map((t: any) => ({
+          id: t.id, title: t.title, summary: t.summary, sort_order: t.sort_order,
+          items: (t.course_topic_items ?? []).sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+        }));
+        setTopics(mapped);
+        if (mapped[0]) setExpanded(new Set([mapped[0].id]));
+      }
+      setLoading(false);
+    })();
+  }, [course.id]);
+
+  const totalItems = topics.reduce((s, t) => s + t.items.length, 0);
+  const cover = course.thumbnail_url || 'https://images.pexels.com/photos/301926/pexels-photo-301926.jpeg?auto=compress&cs=tinysrgb&w=800&h=400&fit=crop';
+
+  const toggle = (id: string) =>
+    setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-900/70 backdrop-blur-sm p-0 sm:p-4">
+      <div className="relative bg-white w-full sm:max-w-xl rounded-t-3xl sm:rounded-3xl max-h-[95dvh] sm:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+
+        {/* Preview badge + close */}
+        <div className="absolute top-4 left-4 z-10">
+          <span className="flex items-center gap-1.5 text-[11px] font-bold bg-black/50 backdrop-blur-sm text-white px-3 py-1.5 rounded-full">
+            <Monitor size={11} /> Student Preview
+          </span>
+        </div>
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center hover:bg-black/60 transition-colors"
+        >
+          <X size={17} className="text-white" />
+        </button>
+
+        {/* Hero */}
+        <div className="relative h-52 sm:h-60 flex-shrink-0">
+          <img src={cover} alt={course.title} className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 px-5 pb-4">
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              <span className="text-[11px] font-bold bg-white/20 backdrop-blur-sm text-white px-2.5 py-0.5 rounded-full border border-white/25 capitalize">
+                {course.difficulty_level}
+              </span>
+              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-white/25 backdrop-blur-sm ${course.pricing_model === 'free' ? 'bg-emerald-500/80 text-white' : 'bg-amber-500/80 text-white'}`}>
+                {course.pricing_model === 'free' ? 'Free' : 'Paid'}
+              </span>
+              <span className="text-[11px] font-bold bg-white/20 backdrop-blur-sm text-white px-2.5 py-0.5 rounded-full border border-white/25 capitalize flex items-center gap-1">
+                {course.visibility === 'public' ? <Globe size={9} /> : <Lock size={9} />} {course.visibility}
+              </span>
+            </div>
+            <h1 className="font-black text-white text-xl sm:text-2xl leading-tight line-clamp-2">{course.title}</h1>
+          </div>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Description + meta */}
+          <div className="px-5 pt-4 pb-3 border-b border-slate-100">
+            {course.description && (
+              <p className="text-sm text-slate-600 mb-3 leading-relaxed">{course.description}</p>
+            )}
+            <div className="flex items-center gap-4 text-xs text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <Layers size={13} className="text-rose-400" />
+                <span className="font-medium">{course.topic_count}</span> {course.topic_count === 1 ? 'topic' : 'topics'}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <BookOpen size={13} className="text-blue-400" />
+                <span className="font-medium">{totalItems}</span> lessons
+              </span>
+            </div>
+          </div>
+
+          {/* Curriculum */}
+          <div className="px-5 py-4">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Curriculum</p>
+            {loading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => <div key={i} className="h-12 bg-slate-100 rounded-2xl animate-pulse" />)}
+              </div>
+            ) : topics.length === 0 ? (
+              <div className="text-center py-10 text-slate-400 text-sm">No curriculum added yet</div>
+            ) : (
+              <div className="space-y-2">
+                {topics.map((topic, tIdx) => {
+                  const isOpen = expanded.has(topic.id);
+                  return (
+                    <div key={topic.id} className="border border-slate-200 rounded-2xl overflow-hidden transition-all">
+                      <button
+                        onClick={() => toggle(topic.id)}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <span className="w-6 h-6 rounded-full bg-rose-100 text-rose-600 text-[11px] font-black flex items-center justify-center flex-shrink-0">
+                            {tIdx + 1}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-slate-800 text-sm truncate">{topic.title}</p>
+                            {topic.summary && (
+                              <p className="text-[11px] text-slate-400 truncate">{topic.summary}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                          <span className="text-[11px] text-slate-400 hidden sm:inline">
+                            {topic.items.length} item{topic.items.length !== 1 ? 's' : ''}
+                          </span>
+                          <ChevronDown size={14} className={`text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                      </button>
+
+                      {isOpen && topic.items.length > 0 && (
+                        <div className="border-t border-slate-100">
+                          {topic.items.map((item, iIdx) => (
+                            <div key={item.id} className={`flex items-center gap-3 px-4 py-2.5 ${iIdx !== topic.items.length - 1 ? 'border-b border-slate-50' : ''}`}>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
+                                item.type === 'lesson' ? 'bg-blue-100 text-blue-600' :
+                                item.type === 'quiz'   ? 'bg-amber-100 text-amber-600' :
+                                                         'bg-green-100 text-green-600'
+                              }`}>{item.type}</span>
+                              <span className="text-sm text-slate-700 flex-1 truncate">
+                                {item.title || `Untitled ${item.type}`}
+                              </span>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {item.video_url && <Video size={12} className="text-slate-300" />}
+                                <Lock size={11} className="text-slate-200" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {isOpen && topic.items.length === 0 && (
+                        <div className="border-t border-slate-100 px-4 py-3 text-xs text-slate-400 italic">
+                          No items in this topic
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer CTA */}
+        <div className="flex items-center justify-between gap-4 px-5 py-4 border-t border-slate-100 bg-white flex-shrink-0">
+          <div>
+            <p className="font-bold text-slate-800 text-sm">
+              {course.pricing_model === 'free' ? 'Free Enrollment' : 'Paid Course'}
+            </p>
+            <p className="text-[11px] text-slate-400">Preview only — students see this view</p>
+          </div>
+          <button
+            disabled
+            className="flex items-center gap-2 px-5 py-2.5 bg-rose-600 text-white text-sm font-bold rounded-xl opacity-50 cursor-not-allowed"
+          >
+            Enroll Now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Course Card ──────────────────────────────────────────────────────────────
-function CourseCard({ course, onEdit, onDelete, onTogglePublish }: {
+function CourseCard({ course, onEdit, onDelete, onTogglePublish, onPreview }: {
   course: CourseRow;
   onEdit: () => void;
   onDelete: () => void;
   onTogglePublish: () => void;
+  onPreview: () => void;
 }) {
   const cover = course.thumbnail_url || 'https://images.pexels.com/photos/301926/pexels-photo-301926.jpeg?auto=compress&cs=tinysrgb&w=600&h=300&fit=crop';
   const menuItems: ActionItem[] = [
-    { icon: Edit3,   label: 'Edit Course', onClick: onEdit },
-    { icon: course.is_published ? EyeOff : Eye, label: course.is_published ? 'Unpublish' : 'Publish', onClick: onTogglePublish, divider: true },
-    { icon: Trash2,  label: 'Delete Course', onClick: onDelete, danger: true, divider: true },
+    { icon: Edit3,    label: 'Edit Course',   onClick: onEdit },
+    { icon: Monitor,  label: 'Student View',  onClick: onPreview, divider: true },
+    { icon: course.is_published ? EyeOff : Eye, label: course.is_published ? 'Unpublish' : 'Publish', onClick: onTogglePublish },
+    { icon: Trash2,   label: 'Delete Course', onClick: onDelete, danger: true, divider: true },
   ];
   return (
     /* overflow-visible so the ActionMenu dropdown is never clipped */
@@ -1704,6 +1893,7 @@ export default function AdminDashboard() {
   const [deleteLesson, setDeleteLesson]   = useState<LessonRow | null>(null);
   const [deleteUser, setDeleteUser]       = useState<Profile | null>(null);
   const [deleteCourse, setDeleteCourse]   = useState<CourseRow | null>(null);
+  const [previewCourse, setPreviewCourse] = useState<CourseRow | null>(null);
   const [editLesson, setEditLesson]       = useState<LessonRow | null>(null);
   const [showCourseBuilder, setShowCourseBuilder] = useState(false);
   const [editCourseId, setEditCourseId] = useState<string | null>(null);
@@ -2117,6 +2307,7 @@ export default function AdminDashboard() {
                       onEdit={() => setEditCourseId(course.id)}
                       onDelete={() => setDeleteCourse(course)}
                       onTogglePublish={() => handleToggleCoursePublish(course.id)}
+                      onPreview={() => setPreviewCourse(course)}
                     />
                   ))}
                 </div>
@@ -2181,6 +2372,12 @@ export default function AdminDashboard() {
           body={`"${deleteCourse.title}" and all its topics will be permanently removed.`}
           onConfirm={() => handleDeleteCourse(deleteCourse.id)}
           onCancel={() => setDeleteCourse(null)}
+        />
+      )}
+      {previewCourse && (
+        <CoursePreviewModal
+          course={previewCourse}
+          onClose={() => setPreviewCourse(null)}
         />
       )}
       {editLesson && (
