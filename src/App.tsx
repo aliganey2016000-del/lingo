@@ -5,12 +5,14 @@ import AuthPage from './pages/AuthPage';
 import StudentDashboard from './pages/StudentDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import CoursePreviewPage from './pages/CoursePreviewPage';
 import { useAuth } from './lib/AuthContext';
 
 function AppRouter() {
   const { user, profile, loading } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [previewCourseId, setPreviewCourseId] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -23,8 +25,17 @@ function AppRouter() {
     );
   }
 
+  if (previewCourseId) {
+    return (
+      <CoursePreviewPage
+        courseId={previewCourseId}
+        onBack={() => setPreviewCourseId(null)}
+      />
+    );
+  }
+
   if (user && profile) {
-    if (profile.role === 'admin') return <AdminDashboard />;
+    if (profile.role === 'admin') return <AdminDashboard onPreviewCourse={setPreviewCourseId} />;
     if (profile.role === 'teacher') return <TeacherDashboard />;
     return <StudentDashboard />;
   }
